@@ -21,7 +21,7 @@
 #ifndef _PORTABLE_H
 #define _PORTABLE_H
 
-#define NDIS50 1
+#define NDIS630 1
 #define OBJ_KERNEL_HANDLE 0x00000200L
 // #ifdef _MSC_VER
 #define STDCALL
