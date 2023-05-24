@@ -18,6 +18,8 @@
   along with WinAoE.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define NO_STDIO_REDIRECT
+
 #include "portable.h"
 #include <stdio.h>
 #include <windows.h>
@@ -34,7 +36,7 @@ void DisplayError(char *String) {
 
   printf("Error: %s\n", String);
   printf("GetLastError: 0x%08x (%d)\n", ErrorCode, (int)ErrorCode);
-  if (FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, ErrorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)ErrorString, sizeof(ErrorString), NULL)) printf("%s", ErrorString);
+  if (FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, ErrorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)ErrorString, sizeof(ErrorString), NULL)) printf("%s", ErrorString);
 }
 
 int main(int argc, char **argv, char **envp) {
@@ -47,18 +49,19 @@ int main(int argc, char **argv, char **envp) {
   BOOL RebootRequired = FALSE;
   TCHAR FullFilePath[1024];
 
-  if (!GetFullPathName("aoe.inf", sizeof(FullFilePath), FullFilePath, NULL)) goto GetFullPathNameError;
-  if ((Library = LoadLibrary("newdev.dll")) == NULL) goto LoadLibraryError;
+  if (!GetFullPathNameA("aoe.inf", sizeof(FullFilePath), FullFilePath, NULL)) goto GetFullPathNameError;
+  if ((Library = LoadLibrary(L"newdev.dll")) == NULL) goto LoadLibraryError;
   if ((UpdateDriverForPlugAndPlayDevicesA = GetProcAddress(Library, "UpdateDriverForPlugAndPlayDevicesA")) == NULL) goto GetProcAddressError;
 
-  if (!SetupDiGetINFClass(FullFilePath, &ClassGUID, ClassName, sizeof(ClassName), 0)) goto GetINFClassError;
+  if (!SetupDiGetINFClassA(FullFilePath, &ClassGUID, ClassName, sizeof(ClassName), 0)) goto GetINFClassError;
   if ((DeviceInfoSet = SetupDiCreateDeviceInfoList(&ClassGUID, 0)) == INVALID_HANDLE_VALUE) goto CreateDeviceInfoListError;
   DeviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
   if (!SetupDiCreateDeviceInfo(DeviceInfoSet, ClassName, &ClassGUID, NULL, 0, DICD_GENERATE_ID, &DeviceInfoData)) goto CreateDeviceInfoError;
-  if (!SetupDiSetDeviceRegistryProperty(DeviceInfoSet, &DeviceInfoData, SPDRP_HARDWAREID, (LPBYTE)"AoE\0\0\0", (lstrlen("AoE\0\0\0")+1+1) * sizeof(TCHAR))) goto SetDeviceRegistryPropertyError;
+  if (!SetupDiSetDeviceRegistryProperty(DeviceInfoSet, &DeviceInfoData, SPDRP_HARDWAREID, (LPBYTE)L"aoe\0\0\0", (lstrlen(L"aoe\0\0\0")) * sizeof(TCHAR))) goto SetDeviceRegistryPropertyError;
   if (!SetupDiCallClassInstaller(DIF_REGISTERDEVICE, DeviceInfoSet, &DeviceInfoData)) goto CallClassInstallerREGISTERDEVICEError;
 
-  if (!UpdateDriverForPlugAndPlayDevices(0, "AoE\0\0\0", FullFilePath, INSTALLFLAG_FORCE, &RebootRequired)) {
+  if (!UpdateDriverForPlugAndPlayDevices(0, L"aoe\0\0\0", FullFilePath, INSTALLFLAG_FORCE, &RebootRequired)) {
+      printf(FullFilePath);
     DWORD err = GetLastError();
     DisplayError("UpdateDriverForPlugAndPlayDevices");
     if (!SetupDiCallClassInstaller(DIF_REMOVE, DeviceInfoSet, &DeviceInfoData)) DisplayError("CallClassInstaller(REMOVE)");

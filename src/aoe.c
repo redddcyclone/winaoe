@@ -73,7 +73,7 @@ typedef struct _AOE {
   USHORT Reserved;
 
   UCHAR Data[];
-} __attribute__((__packed__)) AOE, *PAOE;
+} AOE, *PAOE;
 #pragma pack()
 
 typedef struct _REQUEST {
@@ -122,15 +122,16 @@ NTSTATUS STDCALL AoEStart() {
   PVOID ThreadObject;
 
   DbgPrint("AoEStart\n");
-  if ((ProbeTag = (PTAG)ExAllocatePool(NonPagedPool, sizeof(TAG))) == NULL) {
-    DbgPrint("AddStart ExAllocatePool ProbeTag\n");
+  if ((ProbeTag = (PTAG)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(TAG), 'AoES')) == NULL) {
+    DbgPrint("AddStart ExAllocatePool2 ProbeTag\n");
     return STATUS_INSUFFICIENT_RESOURCES;
   }
   RtlZeroMemory(ProbeTag, sizeof(TAG));
   ProbeTag->PacketSize = sizeof(AOE);
-  if ((ProbeTag->PacketData = (PAOE)ExAllocatePool(NonPagedPool, ProbeTag->PacketSize)) == NULL) {
-    DbgPrint("AddStart ExAllocatePool ProbeTag->PacketData\n");
+  if ((ProbeTag->PacketData = (PAOE)ExAllocatePool2(POOL_FLAG_NON_PAGED, ProbeTag->PacketSize, 'AoES')) == NULL) {
+    DbgPrint("AddStart ExAllocatePool2 ProbeTag->PacketData\n");
     ExFreePool(ProbeTag);
+    return STATUS_INSUFFICIENT_RESOURCES;
   }
   ProbeTag->SendTime.QuadPart = 0LL;
   RtlZeroMemory(ProbeTag->PacketData, ProbeTag->PacketSize);
@@ -205,15 +206,14 @@ VOID STDCALL AoEStop() {
 }
 
 BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
-  PDISKSEARCH DiskSearch, DiskSearchWalker, PreviousDiskSearch;
+  PDISKSEARCH DiskSearch, DiskSearchWalker, PreviousDiskSearch = NULL;
   LARGE_INTEGER Timeout, CurrentTime;
-  PTAG Tag, TagWalker;
+  PTAG Tag = NULL, TagWalker;
   KIRQL Irql, InnerIrql;
   LARGE_INTEGER MaxSectorsPerPacketSendTime;
-  ULONG MTU;
 
-  if ((DiskSearch = (PDISKSEARCH)ExAllocatePool(NonPagedPool, sizeof(DISKSEARCH))) == NULL) {
-    DbgPrint("AoESearchBootDrive ExAllocatePool DiskSearch\n");
+  if ((DiskSearch = (PDISKSEARCH)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(DISKSEARCH), 'AoED')) == NULL) {
+    DbgPrint("AoESearchBootDrive ExAllocatePool2 DiskSearch\n");
     return FALSE;
   }
 
@@ -243,14 +243,17 @@ BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
     KeAcquireSpinLock(&DeviceExtension->Disk.SpinLock, &Irql);
     if (DeviceExtension->Disk.SearchState == SearchNIC) {
       if (!ProtocolSearchNIC(DeviceExtension->Disk.ClientMac)) {
+        DbgPrint("ProtocolSearchNIC failed\n");
         KeReleaseSpinLock(&DeviceExtension->Disk.SpinLock, Irql);
-        continue;
+        return FALSE;
       } else {
+          DbgPrint("ProtocolSearchNIC success\n");
         DeviceExtension->Disk.MTU = ProtocolGetMTU(DeviceExtension->Disk.ClientMac);
         DeviceExtension->Disk.SearchState = GetSize;
       }
     }
 
+    DbgPrint("GettingSize\n");
     if (DeviceExtension->Disk.SearchState == GettingSize) {
       KeReleaseSpinLock(&DeviceExtension->Disk.SpinLock, Irql);
       continue;
@@ -259,6 +262,7 @@ BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
       KeReleaseSpinLock(&DeviceExtension->Disk.SpinLock, Irql);
       continue;
     }
+    DbgPrint("SectorsperPacket\n");
     if (DeviceExtension->Disk.SearchState == GettingMaxSectorsPerPacket) {
       KeQuerySystemTime(&CurrentTime);
       if (CurrentTime.QuadPart > MaxSectorsPerPacketSendTime.QuadPart + 2500000LL) {    // 2.500.000 * 100ns = 250.000.000 ns = 250ms
@@ -318,8 +322,8 @@ BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
       return TRUE;
     }
 
-    if ((Tag = (PTAG)ExAllocatePool(NonPagedPool, sizeof(TAG))) == NULL) {
-      DbgPrint("AoESearchBootDrive ExAllocatePool Tag\n");
+    if ((Tag = (PTAG)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(TAG), 'AoED')) == NULL) {
+      DbgPrint("AoESearchBootDrive ExAllocatePool2 Tag\n");
       KeReleaseSpinLock(&DeviceExtension->Disk.SpinLock, Irql);
       continue;
     }
@@ -327,8 +331,8 @@ BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
     Tag->Type = SearchDriveType;
     Tag->DeviceExtension = DeviceExtension;
     Tag->PacketSize = sizeof(AOE);
-    if ((Tag->PacketData = (PAOE)ExAllocatePool(NonPagedPool, Tag->PacketSize)) == NULL) {
-      DbgPrint("AoESearchBootDrive ExAllocatePool Tag->PacketData\n");
+    if ((Tag->PacketData = (PAOE)ExAllocatePool2(POOL_FLAG_NON_PAGED, Tag->PacketSize, 'AoED')) == NULL) {
+      DbgPrint("AoESearchBootDrive ExAllocatePool2 Tag->PacketData\n");
       ExFreePool(Tag);
       Tag = NULL;
       KeReleaseSpinLock(&DeviceExtension->Disk.SpinLock, Irql);
@@ -384,7 +388,7 @@ BOOLEAN STDCALL AoESearchDrive(IN PDEVICEEXTENSION DeviceExtension) {
 
 NTSTATUS STDCALL AoERequest(IN PDEVICEEXTENSION DeviceExtension, IN REQUESTMODE Mode, IN LONGLONG StartSector, IN ULONG SectorCount, IN PUCHAR Buffer, IN PIRP Irp) {
   PREQUEST Request;
-  PTAG Tag, NewTagList = NULL, PreviousTag = NULL;
+  PTAG Tag = NULL, NewTagList = NULL, PreviousTag = NULL;
   KIRQL Irql;
   ULONG i;
 
@@ -403,8 +407,8 @@ NTSTATUS STDCALL AoERequest(IN PDEVICEEXTENSION DeviceExtension, IN REQUESTMODE 
     return STATUS_CANCELLED;
   }
 
-  if ((Request = (PREQUEST)ExAllocatePool(NonPagedPool, sizeof(REQUEST))) == NULL) {
-    DbgPrint("AoERequest ExAllocatePool Request\n");
+  if ((Request = (PREQUEST)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(REQUEST), 'AoER')) == NULL) {
+    DbgPrint("AoERequest ExAllocatePool2 Request\n");
     Irp->IoStatus.Information = 0;
     Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -418,8 +422,8 @@ NTSTATUS STDCALL AoERequest(IN PDEVICEEXTENSION DeviceExtension, IN REQUESTMODE 
   Request->TagCount = 0;
 
   for (i = 0; i < SectorCount; i += DeviceExtension->Disk.MaxSectorsPerPacket) {
-    if ((Tag = (PTAG)ExAllocatePool(NonPagedPool, sizeof(TAG))) == NULL) {
-      DbgPrint("AoERequest ExAllocatePool Tag\n");
+    if ((Tag = (PTAG)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(TAG), 'AoER')) == NULL) {
+      DbgPrint("AoERequest ExAllocatePool2 Tag\n");
       Tag = NewTagList;
       while (Tag != NULL) {
         PreviousTag = Tag;
@@ -443,8 +447,8 @@ NTSTATUS STDCALL AoERequest(IN PDEVICEEXTENSION DeviceExtension, IN REQUESTMODE 
     Tag->SectorCount = ((SectorCount - i) < DeviceExtension->Disk.MaxSectorsPerPacket?SectorCount - i:DeviceExtension->Disk.MaxSectorsPerPacket);
     Tag->PacketSize = sizeof(AOE);
     if (Mode == Write) Tag->PacketSize += Tag->SectorCount * SECTORSIZE;
-    if ((Tag->PacketData = (PAOE)ExAllocatePool(NonPagedPool, Tag->PacketSize)) == NULL) {
-      DbgPrint("AoERequest ExAllocatePool Tag->PacketData\n");
+    if ((Tag->PacketData = (PAOE)ExAllocatePool2(POOL_FLAG_NON_PAGED, Tag->PacketSize, 'AoER')) == NULL) {
+      DbgPrint("AoERequest ExAllocatePool2 Tag->PacketData\n");
       ExFreePool(Tag);
       Tag = NewTagList;
       while (Tag != NULL) {
@@ -638,6 +642,8 @@ VOID STDCALL Thread(IN PVOID StartContext) {
   ULONG Fails = 0;
   ULONG RequestTimeout = 0;
 
+  UNREFERENCED_PARAMETER(StartContext);
+
   DbgPrint("Thread\n");
   ReportTime.QuadPart = 0LL;
   ProbeTime.QuadPart = 0LL;
@@ -666,7 +672,7 @@ VOID STDCALL Thread(IN PVOID StartContext) {
       ProbeTag->Id = NextTagId++;
       if (NextTagId == 0) NextTagId++;
       ProbeTag->PacketData->Tag = ProbeTag->Id;
-      ProtocolSend("\xff\xff\xff\xff\xff\xff", "\xff\xff\xff\xff\xff\xff", (PUCHAR)ProbeTag->PacketData, ProbeTag->PacketSize, NULL);
+      ProtocolSend((PUCHAR)"\xff\xff\xff\xff\xff\xff", (PUCHAR)"\xff\xff\xff\xff\xff\xff", (PUCHAR)ProbeTag->PacketData, ProbeTag->PacketSize, NULL);
       KeQuerySystemTime(&ProbeTag->SendTime);
     }
 

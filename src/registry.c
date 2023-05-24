@@ -67,8 +67,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
       DbgPrint("ZwEnumerateKey 1 failed in SetupRegistry (%lx)\n", Status);
       goto e0_1;
     }
-    if ((KeyInformation = (PKEY_BASIC_INFORMATION)ExAllocatePool(NonPagedPool, ResultLength)) == NULL) {
-      DbgPrint("ExAllocatePool KeyData failed in SetupRegistry\n");
+    if ((KeyInformation = (PKEY_BASIC_INFORMATION)ExAllocatePool2(POOL_FLAG_NON_PAGED, ResultLength, 'ReSe')) == NULL) {
+      DbgPrint("ExAllocatePool2 KeyData failed in SetupRegistry\n");
       goto e0_1;
       if (!NT_SUCCESS(ZwClose(NetworkClassKeyHandle))) DbgPrint("ZwClose NetworkClassKeyHandle failed in SetupRegistry\n");
     }
@@ -78,8 +78,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
     }
 
     InterfacesKeyStringLength = KeyInformation->NameLength + sizeof(InterfacesPath);
-    if ((InterfacesKeyString = (PWCHAR)ExAllocatePool(NonPagedPool, InterfacesKeyStringLength)) == NULL) {
-      DbgPrint("ExAllocatePool InterfacesKeyString failed in SetupRegistry\n");
+    if ((InterfacesKeyString = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, InterfacesKeyStringLength, 'ReSe')) == NULL) {
+      DbgPrint("ExAllocatePool2 InterfacesKeyString failed in SetupRegistry\n");
       goto e0_2;
     }
 
@@ -95,8 +95,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
           DbgPrint("ZwQueryValueKey InterfacesKey 1 failed in SetupRegistry (%lx)\n", Status);
           goto e1_1;
         }
-        if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool(NonPagedPool, ResultLength)) == NULL) {
-          DbgPrint("ExAllocatePool InterfacesKey KeyValueData failed in SetupRegistry\n");
+        if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_NON_PAGED, ResultLength, 'ReSe')) == NULL) {
+          DbgPrint("ExAllocatePool2 InterfacesKey KeyValueData failed in SetupRegistry\n");
           goto e1_1;
         }
         if (!(NT_SUCCESS(ZwQueryValueKey(SubKeyHandle, &LowerRange, KeyValuePartialInformation, KeyValueInformation, ResultLength, &ResultLength)))) {
@@ -115,8 +115,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
 
     if (Update) {
       LinkageKeyStringLength = KeyInformation->NameLength + sizeof(LinkagePath);
-      if ((LinkageKeyString = (PWCHAR)ExAllocatePool(NonPagedPool, LinkageKeyStringLength)) == NULL) {
-        DbgPrint("ExAllocatePool LinkageKeyString failed in SetupRegistry\n");
+      if ((LinkageKeyString = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, LinkageKeyStringLength, 'ReSe')) == NULL) {
+        DbgPrint("ExAllocatePool2 LinkageKeyString failed in SetupRegistry\n");
         goto e0_2;
       }
       RtlCopyMemory(LinkageKeyString, KeyInformation->Name, KeyInformation->NameLength);
@@ -125,7 +125,7 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
 
       InitializeObjectAttributes(&SubKeyObject, &LinkageKey, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NetworkClassKeyHandle, NULL);
       if (!NT_SUCCESS(ZwCreateKey(&SubKeyHandle, KEY_ALL_ACCESS, &SubKeyObject, 0, NULL, REG_OPTION_NON_VOLATILE, NULL))) {
-        DbgPrint("ZwCreateKey failed in SetupRegistry (%lx)\n");
+        DbgPrint("ZwCreateKey failed in SetupRegistry (%lx)\n", Status);
         goto e2_0;
       }
       if ((Status = ZwQueryValueKey(SubKeyHandle, &UpperBind, KeyValuePartialInformation, NULL, 0, &ResultLength)) != STATUS_OBJECT_NAME_NOT_FOUND) {;
@@ -133,8 +133,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
           DbgPrint("ZwQueryValueKey LinkageKey 1 failed in SetupRegistry (%lx)\n", Status);
           goto e2_1;
         }
-        if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool(NonPagedPool, ResultLength)) == NULL) {
-          DbgPrint("ExAllocatePool LinkageKey KeyValueData failed in SetupRegistry\n");
+        if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_NON_PAGED, ResultLength, 'ReSe')) == NULL) {
+          DbgPrint("ExAllocatePool2 LinkageKey KeyValueData failed in SetupRegistry\n");
           goto e2_1;
         }
         if (!(NT_SUCCESS(ZwQueryValueKey(SubKeyHandle, &UpperBind, KeyValuePartialInformation, KeyValueInformation, ResultLength, &ResultLength)))) {
@@ -152,16 +152,16 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
 
         if (Found) {
           NewValueLength = KeyValueInformation->DataLength;
-          if ((NewValue = (PWCHAR)ExAllocatePool(NonPagedPool, NewValueLength)) == NULL) {
-            DbgPrint("ExAllocatePool NewValue 1 failed in SetupRegistry\n");
+          if ((NewValue = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, NewValueLength, 'ReSe')) == NULL) {
+            DbgPrint("ExAllocatePool2 NewValue 1 failed in SetupRegistry\n");
             goto e2_2;
           }
           RtlCopyMemory(NewValue, KeyValueInformation->Data, KeyValueInformation->DataLength);
         } else {
           Updated = TRUE;
           NewValueLength = KeyValueInformation->DataLength + sizeof(L"AoE");
-          if ((NewValue = (PWCHAR)ExAllocatePool(NonPagedPool, NewValueLength)) == NULL) {
-            DbgPrint("ExAllocatePool NewValue 2 failed in SetupRegistry\n");
+          if ((NewValue = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, NewValueLength, 'ReSe')) == NULL) {
+            DbgPrint("ExAllocatePool2 NewValue 2 failed in SetupRegistry\n");
             goto e2_2;
           }
           RtlCopyMemory(NewValue, L"AoE", sizeof(L"AoE"));
@@ -171,8 +171,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
       } else {
         Updated = TRUE;
         NewValueLength = sizeof(L"AoE") + sizeof(WCHAR);
-        if ((NewValue = (PWCHAR)ExAllocatePool(NonPagedPool, NewValueLength)) == NULL) {
-          DbgPrint("ExAllocatePool NewValue 3 failed in SetupRegistry\n");
+        if ((NewValue = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, NewValueLength, 'ReSe')) == NULL) {
+          DbgPrint("ExAllocatePool2 NewValue 3 failed in SetupRegistry\n");
           goto e2_1;
         }
         RtlZeroMemory(NewValue, NewValueLength);
@@ -192,8 +192,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
 
 // start nic (
       NdiKeyStringLength = KeyInformation->NameLength + sizeof(NdiPath);
-      if ((NdiKeyString = (PWCHAR)ExAllocatePool(NonPagedPool, NdiKeyStringLength)) == NULL) {
-        DbgPrint("ExAllocatePool NdiKeyString failed in SetupRegistry\n");
+      if ((NdiKeyString = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, NdiKeyStringLength, 'ReSe')) == NULL) {
+        DbgPrint("ExAllocatePool2 NdiKeyString failed in SetupRegistry\n");
         goto e0_2;
       }
       RtlCopyMemory(NdiKeyString, KeyInformation->Name, KeyInformation->NameLength);
@@ -207,8 +207,8 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
             DbgPrint("ZwQueryValueKey NdiKey 1 failed in SetupRegistry (%lx)\n", Status);
             goto e3_1;
           }
-          if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool(NonPagedPool, ResultLength)) == NULL) {
-            DbgPrint("ExAllocatePool NdiKey KeyValueData failed in SetupRegistry\n");
+          if ((KeyValueInformation = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_NON_PAGED, ResultLength, 'ReSe')) == NULL) {
+            DbgPrint("ExAllocatePool2 NdiKey KeyValueData failed in SetupRegistry\n");
             goto e3_1;
           }
           if (!(NT_SUCCESS(ZwQueryValueKey(SubKeyHandle, &Service, KeyValuePartialInformation, KeyValueInformation, ResultLength, &ResultLength)))) {
@@ -220,12 +220,12 @@ BOOLEAN STDCALL SetupRegistry(OUT PNTSTATUS StatusOut) {
             DbgPrint("ZwClose NdiKey SubKeyHandle failed in SetupRegistry\n");
             goto e3_0;
           }
-          if ((DriverServiceNameString = (PWCHAR)ExAllocatePool(NonPagedPool, sizeof(DriverServiceNamePath) + KeyValueInformation->DataLength - sizeof(WCHAR))) == NULL) {
-            DbgPrint("ExAllocatePool DriverServiceNameString failed in SetupRegistry\n");
+          if ((DriverServiceNameString = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(DriverServiceNamePath) + KeyValueInformation->DataLength - sizeof(WCHAR), 'ReSe')) == NULL) {
+            DbgPrint("ExAllocatePool2 DriverServiceNameString failed in SetupRegistry\n");
             goto e3_0;
           }
 
-          RtlCopyMemory(DriverServiceNameString, DriverServiceNamePath, sizeof(DriverServiceNamePath));
+          RtlCopyMemory(DriverServiceNameString, DriverServiceNamePath, sizeof(DriverServiceNamePath) + KeyValueInformation->DataLength - sizeof(WCHAR));
           RtlCopyMemory(&DriverServiceNameString[(sizeof(DriverServiceNamePath) / sizeof(WCHAR)) - 1], KeyValueInformation->Data, KeyValueInformation->DataLength);
           RtlInitUnicodeString(&DriverServiceName, DriverServiceNameString);
 //          DbgPrint("Starting driver %S -> %08x\n", KeyValueInformation->Data, ZwLoadDriver(&DriverServiceName));

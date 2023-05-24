@@ -63,6 +63,8 @@ NTSTATUS STDCALL DriverEntry(IN PDRIVER_OBJECT DriverObject, IN PUNICODE_STRING 
   NTSTATUS Status;
   int i;
 
+  UNREFERENCED_PARAMETER(RegistryPath);
+
 //---
 //---
 
@@ -180,6 +182,7 @@ NTSTATUS STDCALL NTAPI Dispatch(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) {
 }
 
 VOID STDCALL NTAPI Unload(IN PDRIVER_OBJECT DriverObject) {
+  UNREFERENCED_PARAMETER(DriverObject);
   if (StateHandle != NULL) PoUnregisterSystemState(StateHandle);
   ProtocolStop();
   AoEStop();

@@ -49,7 +49,7 @@ typedef union _EIGHT_BYTE {
     UCHAR Byte7;
   };
   ULONGLONG AsULongLong;
-} __attribute__((__packed__)) EIGHT_BYTE, *PEIGHT_BYTE;
+} EIGHT_BYTE, *PEIGHT_BYTE;
 #pragma pack()
 
 #define REVERSE_BYTES_QUAD(Destination, Source) { \
@@ -72,7 +72,7 @@ typedef union _EIGHT_BYTE {
 typedef struct _READ_CAPACITY_DATA_EX {
   LARGE_INTEGER LogicalBlockAddress;
   ULONG BytesPerBlock;
-} __attribute__((__packed__)) READ_CAPACITY_DATA_EX, *PREAD_CAPACITY_DATA_EX;
+} READ_CAPACITY_DATA_EX, *PREAD_CAPACITY_DATA_EX;
 #pragma pack()
 #endif
 
@@ -87,7 +87,7 @@ typedef struct _PORTABLE_CDB16 {
   UCHAR TransferLength[4];
   UCHAR Reserved2;
   UCHAR Control;
-} __attribute__((__packed__)) CDB16, *PCDB16;
+} CDB16, *PCDB16;
 #pragma pack()
 
 DEFINE_GUID(GUID_BUS_TYPE_INTERNAL, 0x2530ea73L, 0x086b, 0x11d1, 0xa0, 0x9f, 0x00, 0xc0, 0x4f, 0xc3, 0x40, 0xb1);
@@ -102,21 +102,23 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
   PDEVICE_CAPABILITIES DeviceCapabilities;
   DEVICE_CAPABILITIES ParentDeviceCapabilities;
   PWCHAR String;
-  ULONG StringLength;
+  ULONG StringLength = 0;
+
+  UNREFERENCED_PARAMETER(DeviceObject);
 
   switch (Stack->MinorFunction) {
     case IRP_MN_QUERY_ID:
-      if ((String = (PWCHAR)ExAllocatePool(NonPagedPool, (512 * sizeof(WCHAR)))) == NULL) {
-        DbgPrint("DiskDispatchPnP ExAllocatePool IRP_MN_QUERY_ID\n");
+      if ((String = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, (512 * sizeof(WCHAR)), 'DiDP')) == NULL) {
+        DbgPrint("DiskDispatchPnP ExAllocatePool2 IRP_MN_QUERY_ID\n");
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
       }
       RtlZeroMemory(String, (512 * sizeof(WCHAR)));
       switch (Stack->Parameters.QueryId.IdType) {
         case BusQueryDeviceID:
-          StringLength = swprintf(String, 511, L"AoE\\Disk%lu", DeviceExtension->Disk.DiskNumber) + 1;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool BusQueryDeviceID\n");
+          StringLength = swprintf_s(String, 511, L"AoE\\Disk%lu", DeviceExtension->Disk.DiskNumber) + 1;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 BusQueryDeviceID\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -124,9 +126,9 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
           Status = STATUS_SUCCESS;
           break;
         case BusQueryInstanceID:
-          StringLength = swprintf(String, 511, L"AOEDISK%lu", DeviceExtension->Disk.DiskNumber) + 1;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool BusQueryInstanceID\n");
+          StringLength = swprintf_s(String, 511, L"AOEDISK%lu", DeviceExtension->Disk.DiskNumber) + 1;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 BusQueryInstanceID\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -134,10 +136,10 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
           Status = STATUS_SUCCESS;
           break;
         case BusQueryHardwareIDs:
-          StringLength = swprintf(String, 511, L"AoE\\Disk%lu", DeviceExtension->Disk.DiskNumber) + 1;
-          StringLength += swprintf(&String[StringLength], 511-StringLength, L"GenDisk") + 4;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool BusQueryHardwareIDs\n");
+          StringLength = swprintf_s(String, 511, L"AoE\\Disk%lu", DeviceExtension->Disk.DiskNumber) + 1;
+          StringLength += swprintf_s(&String[StringLength], 511-StringLength, L"GenDisk") + 4;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 BusQueryHardwareIDs\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -145,9 +147,9 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
           Status = STATUS_SUCCESS;
           break;
         case BusQueryCompatibleIDs:
-          StringLength = swprintf(String, 511, L"GenDisk") + 4;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool BusQueryCompatibleIDs\n");
+          StringLength = swprintf_s(String, 511, L"GenDisk") + 4;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 BusQueryCompatibleIDs\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -161,17 +163,17 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
       ExFreePool(String);
       break;
     case IRP_MN_QUERY_DEVICE_TEXT:
-      if ((String = (PWCHAR)ExAllocatePool(NonPagedPool, (512 * sizeof(WCHAR)))) == NULL) {
-        DbgPrint("DiskDispatchPnP ExAllocatePool IRP_MN_QUERY_DEVICE_TEXT\n");
+      if ((String = (PWCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, (512 * sizeof(WCHAR)), 'DiDP')) == NULL) {
+        DbgPrint("DiskDispatchPnP ExAllocatePool2 IRP_MN_QUERY_DEVICE_TEXT\n");
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
       }
       RtlZeroMemory(String, (512 * sizeof(WCHAR)));
       switch (Stack->Parameters.QueryDeviceText.DeviceTextType ) {
         case DeviceTextDescription:
-          StringLength = swprintf(String, 511, L"AoE Disk") + 1;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool DeviceTextDescription\n");
+          StringLength = swprintf_s(String, 511, L"AoE Disk") + 1;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 DeviceTextDescription\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -179,9 +181,9 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
           Status = STATUS_SUCCESS;
           break;
         case DeviceTextLocationInformation:
-          StringLength = swprintf(String, 511, L"AoE e%d.%d", DeviceExtension->Disk.Major, DeviceExtension->Disk.Minor) + 1;
-          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool(PagedPool, StringLength * sizeof(WCHAR))) == 0) {
-            DbgPrint("DiskDispatchPnP ExAllocatePool DeviceTextLocationInformation\n");
+          StringLength = swprintf_s(String, 511, L"AoE e%d.%d", DeviceExtension->Disk.Major, DeviceExtension->Disk.Minor) + 1;
+          if ((Irp->IoStatus.Information = (ULONG_PTR)ExAllocatePool2(POOL_FLAG_PAGED, StringLength * sizeof(WCHAR), 'DiDP')) == 0) {
+            DbgPrint("DiskDispatchPnP ExAllocatePool2 DeviceTextLocationInformation\n");
             Status = STATUS_INSUFFICIENT_RESOURCES;
             break;
           }
@@ -199,8 +201,8 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
         Status = Irp->IoStatus.Status;
         break;
       }
-      if ((DeviceRelations = (PDEVICE_RELATIONS)ExAllocatePool(PagedPool, sizeof(DEVICE_RELATIONS) + sizeof (PDEVICE_OBJECT))) == NULL) {
-        DbgPrint("DiskDispatchPnP ExAllocatePool IRP_MN_QUERY_DEVICE_RELATIONS\n");
+      if ((DeviceRelations = (PDEVICE_RELATIONS)ExAllocatePool2(POOL_FLAG_PAGED, sizeof(DEVICE_RELATIONS) + sizeof (PDEVICE_OBJECT), 'DiDP')) == NULL) {
+        DbgPrint("DiskDispatchPnP ExAllocatePool2 IRP_MN_QUERY_DEVICE_RELATIONS\n");
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
       }
@@ -211,8 +213,8 @@ NTSTATUS STDCALL DiskDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN
       Status = STATUS_SUCCESS;
       break;
     case IRP_MN_QUERY_BUS_INFORMATION:
-      if ((PnPBusInformation = (PPNP_BUS_INFORMATION)ExAllocatePool(PagedPool, sizeof(PNP_BUS_INFORMATION))) == NULL) {
-        DbgPrint("DiskDispatchPnP ExAllocatePool IRP_MN_QUERY_BUS_INFORMATION\n");
+      if ((PnPBusInformation = (PPNP_BUS_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED, sizeof(PNP_BUS_INFORMATION), 'DiDP')) == NULL) {
+        DbgPrint("DiskDispatchPnP ExAllocatePool2 IRP_MN_QUERY_BUS_INFORMATION\n");
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
       }
@@ -327,6 +329,7 @@ NTSTATUS STDCALL DiskDispatchSCSI(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, I
   ULONG SectorCount, Temp;
   LONGLONG LargeTemp;
   PMODE_PARAMETER_HEADER ModeParameterHeader;
+  PINQUIRYDATA InquiryData;
 
   Srb = Stack->Parameters.Scsi.Srb;
   Cdb = (PCDB)Srb->Cdb;
@@ -403,7 +406,7 @@ NTSTATUS STDCALL DiskDispatchSCSI(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, I
             Temp = SECTORSIZE;
             REVERSE_BYTES(&(((PREAD_CAPACITY_DATA)Srb->DataBuffer)->BytesPerBlock), &Temp);
             if ((DeviceExtension->Disk.LBADiskSize - 1) > 0xffffffff) {
-              ((PREAD_CAPACITY_DATA)Srb->DataBuffer)->LogicalBlockAddress = -1;
+              ((PREAD_CAPACITY_DATA)Srb->DataBuffer)->LogicalBlockAddress = 0xFFFFFFFF;
             } else {
               Temp = (ULONG)(DeviceExtension->Disk.LBADiskSize - 1);
               REVERSE_BYTES(&(((PREAD_CAPACITY_DATA)Srb->DataBuffer)->LogicalBlockAddress), &Temp);
@@ -478,8 +481,12 @@ NTSTATUS STDCALL DiskDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PI
   PSTORAGE_PROPERTY_QUERY StoragePropertyQuery;
   STORAGE_ADAPTER_DESCRIPTOR StorageAdapterDescriptor;
   STORAGE_DEVICE_DESCRIPTOR StorageDeviceDescriptor;
+  DEVICE_TRIM_DESCRIPTOR DeviceTrimDescriptor;
+  STORAGE_ADAPTER_SERIAL_NUMBER StorageAdapterSerialNumber;
   DISK_GEOMETRY DiskGeometry;
   SCSI_ADDRESS ScsiAdress;
+
+  UNREFERENCED_PARAMETER(DeviceObject);
 
   switch (Stack->Parameters.DeviceIoControl.IoControlCode) {
     case IOCTL_STORAGE_QUERY_PROPERTY:
@@ -523,6 +530,32 @@ NTSTATUS STDCALL DiskDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PI
         Status = STATUS_SUCCESS;
       }
 
+      if (StoragePropertyQuery->PropertyId == StorageDeviceTrimProperty && StoragePropertyQuery->QueryType == PropertyStandardQuery) {
+          CopySize = (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(DEVICE_TRIM_DESCRIPTOR) ? Stack->Parameters.DeviceIoControl.OutputBufferLength : sizeof(DEVICE_TRIM_DESCRIPTOR));
+          DeviceTrimDescriptor.Version = sizeof(DEVICE_TRIM_DESCRIPTOR);
+          DeviceTrimDescriptor.Size = sizeof(DEVICE_TRIM_DESCRIPTOR);
+          DeviceTrimDescriptor.TrimEnabled = FALSE;
+          RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &DeviceTrimDescriptor, CopySize);
+          Irp->IoStatus.Information = (ULONG_PTR)CopySize;
+          Status = STATUS_SUCCESS;
+      }
+
+      if (StoragePropertyQuery->PropertyId == StorageAdapterSerialNumberProperty && StoragePropertyQuery->QueryType == PropertyStandardQuery) {
+          CopySize = (Stack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(STORAGE_ADAPTER_SERIAL_NUMBER) ? Stack->Parameters.DeviceIoControl.OutputBufferLength : sizeof(STORAGE_ADAPTER_SERIAL_NUMBER));
+          StorageAdapterSerialNumber.Version = sizeof(STORAGE_ADAPTER_SERIAL_NUMBER);
+          StorageAdapterSerialNumber.Size = sizeof(STORAGE_ADAPTER_SERIAL_NUMBER);
+          swprintf_s(StorageAdapterSerialNumber.SerialNumber, STORAGE_ADAPTER_SERIAL_NUMBER_V1_MAX_LENGTH, L"AoEDiskSerial1234567890");
+          RtlCopyMemory(Irp->AssociatedIrp.SystemBuffer, &StorageAdapterSerialNumber, CopySize);
+          Irp->IoStatus.Information = (ULONG_PTR)CopySize;
+          Status = STATUS_SUCCESS;
+      }
+
+      if ((StoragePropertyQuery->PropertyId == StorageMiniportProperty || StoragePropertyQuery->PropertyId == StorageDeviceResiliencyProperty
+          || StoragePropertyQuery->PropertyId == StorageAdapterCryptoProperty || StoragePropertyQuery->PropertyId == StorageDeviceFaultDomainProperty
+          || StoragePropertyQuery->PropertyId == StorageDeviceAttributesProperty) && StoragePropertyQuery->QueryType == PropertyStandardQuery) {
+          Status = STATUS_SUCCESS;
+      }
+
       if (Status == STATUS_INVALID_PARAMETER) {
         DbgPrint("!!Invalid IOCTL_STORAGE_QUERY_PROPERTY (PropertyId: %08x / QueryType: %08x)!!\n", StoragePropertyQuery->PropertyId, StoragePropertyQuery->QueryType);
       }
@@ -562,6 +595,10 @@ NTSTATUS STDCALL DiskDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PI
 NTSTATUS STDCALL DiskDispatchSystemControl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PIO_STACK_LOCATION Stack, IN PDEVICEEXTENSION DeviceExtension) {
   NTSTATUS Status;
 
+  UNREFERENCED_PARAMETER(DeviceObject);
+  UNREFERENCED_PARAMETER(DeviceExtension);
+  UNREFERENCED_PARAMETER(Stack);
+
   Status = Irp->IoStatus.Status;
   IoCompleteRequest(Irp, IO_NO_INCREMENT);
   return Status;
@@ -579,8 +616,8 @@ NTSTATUS STDCALL BusGetDeviceCapabilities(IN PDEVICE_OBJECT DeviceObject, IN PDE
   RtlZeroMemory(DeviceCapabilities, sizeof(DEVICE_CAPABILITIES));
   DeviceCapabilities->Size = sizeof(DEVICE_CAPABILITIES);
   DeviceCapabilities->Version = 1;
-  DeviceCapabilities->Address = -1;
-  DeviceCapabilities->UINumber = -1;
+  DeviceCapabilities->Address = 0xFFFFFFFF;
+  DeviceCapabilities->UINumber = 0xFFFFFFFF;
 
   KeInitializeEvent(&pnpEvent, NotificationEvent, FALSE);
   targetObject = IoGetAttachedDeviceReference(DeviceObject);

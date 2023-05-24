@@ -61,12 +61,12 @@ int main(int argc, char **argv, char **envp) {
     Command = CommandUmount;
   } else {
     Help();
-    printf("Press enter to exit\n");
-    getchar();
+    //printf("Press enter to exit\n");
+    //getchar();
     goto end;
   }
 
-  DeviceHandle = CreateFile("\\\\.\\AoE", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+  DeviceHandle = CreateFile(L"\\\\.\\AoE", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
   if (DeviceHandle == INVALID_HANDLE_VALUE) {
     printf("CreateFile (%d)\n", (int)GetLastError());
     goto end;
@@ -88,14 +88,14 @@ int main(int argc, char **argv, char **envp) {
       } else {
         printf("Client NIC          Target      Server MAC         Size\n");
         for (i = 0; i < Targets->Count && i < 10; i++) {
-          sprintf(String, "e%lu.%lu      ", Targets->Target[i].Major, Targets->Target[i].Minor);
+          sprintf_s(String, sizeof(String), "e%lu.%lu      ", Targets->Target[i].Major, Targets->Target[i].Minor);
           String[10] = 0;
           printf(" %02x:%02x:%02x:%02x:%02x:%02x  %s  %02x:%02x:%02x:%02x:%02x:%02x  %I64uM\n", Targets->Target[i].ClientMac[0], Targets->Target[i].ClientMac[1], Targets->Target[i].ClientMac[2], Targets->Target[i].ClientMac[3], Targets->Target[i].ClientMac[4], Targets->Target[i].ClientMac[5], String, Targets->Target[i].ServerMac[0], Targets->Target[i].ServerMac[1], Targets->Target[i].ServerMac[2], Targets->Target[i].ServerMac[3], Targets->Target[i].ServerMac[4], Targets->Target[i].ServerMac[5], (Targets->Target[i].LBASize / 2048));
         }
       }
       free(Targets);
-      printf("Press enter to exit\n");
-      getchar();
+      //printf("Press enter to exit\n");
+      //getchar();
       break;
     case CommandShow:
       if ((Disks = (PDISKS)malloc(sizeof(DISKS) + (32 * sizeof(DISK)))) == NULL) {
@@ -112,19 +112,19 @@ int main(int argc, char **argv, char **envp) {
       } else {
         printf("Disk  Client NIC         Server MAC         Target      Size\n");
         for (i = 0; i < Disks->Count && i < 10; i++) {
-          sprintf(String, "e%lu.%lu      ", Disks->Disk[i].Major, Disks->Disk[i].Minor);
+          sprintf_s(String, sizeof(String), "e%lu.%lu      ", Disks->Disk[i].Major, Disks->Disk[i].Minor);
           String[10] = 0;
           printf(" %-4lu %02x:%02x:%02x:%02x:%02x:%02x  %02x:%02x:%02x:%02x:%02x:%02x  %s  %I64uM\n", Disks->Disk[i].Disk, Disks->Disk[i].ClientMac[0], Disks->Disk[i].ClientMac[1], Disks->Disk[i].ClientMac[2], Disks->Disk[i].ClientMac[3], Disks->Disk[i].ClientMac[4], Disks->Disk[i].ClientMac[5], Disks->Disk[i].ServerMac[0], Disks->Disk[i].ServerMac[1], Disks->Disk[i].ServerMac[2], Disks->Disk[i].ServerMac[3], Disks->Disk[i].ServerMac[4], Disks->Disk[i].ServerMac[5], String, (Disks->Disk[i].LBASize / 2048));
         }
       }
       free(Disks);
-      printf("Press enter to exit\n");
-      getchar();
+      //printf("Press enter to exit\n");
+      //getchar();
       break;
     case CommandMount:
-      sscanf(argv[2], "%02x:%02x:%02x:%02x:%02x:%02x", (int*)&Mac[0], (int*)&Mac[1], (int*)&Mac[2], (int*)&Mac[3], (int*)&Mac[4], (int*)&Mac[5]);
-      sscanf(argv[3], "%d", (int*)&Major);
-      sscanf(argv[4], "%d", (int*)&Minor);
+      sscanf_s(argv[2], "%02x:%02x:%02x:%02x:%02x:%02x", (int*)&Mac[0], (int*)&Mac[1], (int*)&Mac[2], (int*)&Mac[3], (int*)&Mac[4], (int*)&Mac[5]);
+      sscanf_s(argv[3], "%d", (int*)&Major);
+      sscanf_s(argv[4], "%d", (int*)&Minor);
       printf("mounting e%d.%d from %02x:%02x:%02x:%02x:%02x:%02x\n", (int)Major, (int)Minor, Mac[0], Mac[1], Mac[2], Mac[3], Mac[4], Mac[5]);
       memcpy(&InBuffer[0], Mac, 6);
       *(PUSHORT)(&InBuffer[6]) = (USHORT)Major;
@@ -134,7 +134,7 @@ int main(int argc, char **argv, char **envp) {
       }
       break;
     case CommandUmount:
-      sscanf(argv[2], "%d", (int*)&Disk);
+      sscanf_s(argv[2], "%d", (int*)&Disk);
       printf("unmounting disk %d\n", (int)Disk);
       memcpy(&InBuffer, &Disk, 4);
       if (!DeviceIoControl(DeviceHandle, IOCTL_AOE_UMOUNT, InBuffer, sizeof(InBuffer), NULL, 0, &BytesReturned, (LPOVERLAPPED) NULL)) {

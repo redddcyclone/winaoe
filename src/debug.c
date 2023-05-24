@@ -39,7 +39,7 @@ typedef struct _IRPLIST {
 
 PIRPLIST IrpList = NULL;
 KSPIN_LOCK SpinLock;
-ULONG Number = 0;
+LONG Number = 0;
 
 extern int sprintf(char*, const char *, ...);
 
@@ -77,12 +77,12 @@ VOID STDCALL DebugIrpStart(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp) {
   PIRPLIST Record, Temp;
   KIRQL Irql;
 
-  if ((DebugMessage = (PCHAR)ExAllocatePool(NonPagedPool, 1024)) == NULL) {
-    DbgPrint("DebugIrpStart ExAllocatePool DebugMessage\n");
+  if ((DebugMessage = (PCHAR)ExAllocatePool2(POOL_FLAG_NON_PAGED, 1024, 'DeIS')) == NULL) {
+    DbgPrint("DebugIrpStart ExAllocatePool2 DebugMessage\n");
   }
   DecodeIrp(DeviceObject, Irp, DebugMessage);
-  if ((Record = (PIRPLIST)ExAllocatePool(NonPagedPool, sizeof(IRPLIST))) == NULL) {
-    DbgPrint("DebugIrpStart ExAllocatePool Record\n");
+  if ((Record = (PIRPLIST)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(IRPLIST), 'DeIS')) == NULL) {
+    DbgPrint("DebugIrpStart ExAllocatePool2 Record\n");
     DbgPrint("IRP %s\n", DebugMessage);
   }
   Record->Next = NULL;
