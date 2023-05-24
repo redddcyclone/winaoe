@@ -118,7 +118,7 @@
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <TargetName>aoe</TargetName>
     <OutDir>$(SolutionDir)$(Platform)\$(ConfigurationName)\</OutDir>
-    <IntDir>$(Platform)\$(ConfigurationName)\</IntDir>
+    <IntDir>$(Platform)\$(ConfigurationName)\WinAoE.Build\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
@@ -127,6 +127,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <TargetName>aoe</TargetName>
+    <IntDir>$(Platform)\$(ConfigurationName)\WinAoE.Build\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
@@ -135,6 +136,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <TargetName>aoe</TargetName>
+    <IntDir>$(Platform)\$(ConfigurationName)\WinAoE.Build\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
@@ -142,6 +144,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
     <TargetName>aoe</TargetName>
+    <IntDir>$(Platform)\$(ConfigurationName)\WinAoE.Build\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
@@ -224,7 +227,30 @@
     <Inf Include="aoeproto.inf" />
   </ItemGroup>
   <ItemGroup>
-    <FilesToPackage Include="$(TargetPath)" />
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\ARM64\Debug\aoe.exe" Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\ARM64\Debug\aoe.sys" Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\Win32\Debug\aoe.exe" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\Win32\Debug\aoe.sys" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\x64\Debug\aoe.exe" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="C:\Users\leona\Documents\GitHub\winaoe\x64\Debug\aoe.sys" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\aoe.c" />

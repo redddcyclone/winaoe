@@ -161,7 +161,7 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
   }
   ExFreePool(AcpiTables);
   // /DEBUG
-
+#ifndef _ARM64_
   // Allocate space and search for BGRT,
   // a table that's on most UEFI implementations?
   // This should allow us to identify firmware type
@@ -179,6 +179,9 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
     DbgPrint("Found BGRT. UEFI firmware detected.\n");
     Uefi = TRUE;
   }
+#else
+  Uefi = TRUE;
+#endif
   if (Uefi) {
     Status = AuxKlibGetSystemFirmwareTable('ACPI', 'TFBa', AOEBootRecord, sizeof(ABFT), NULL);
     if (NT_SUCCESS(Status)) {
@@ -195,6 +198,7 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
       DbgPrint("Couldn't find aBFT on ACPI.\n");
     }
   }
+#ifndef _ARM64_
   else {
     // Search first 640 kB for the ABFT (BIOS only)
     for (USHORT i = 0; i < 0xA000; i += 0x1000) {
@@ -229,6 +233,7 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
     }
   }
   ExFreePool(AcpiTable);
+#endif
 
 #ifdef RIS
   FoundAbft = TRUE;

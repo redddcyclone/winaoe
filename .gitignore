@@ -6,5 +6,8 @@ src/pxe.asm/obj
 *.vcxproj.user
 .vs
 x64
+ARM64
+ARM
+Win32
 src/*.old.c
 src/*.old.h
