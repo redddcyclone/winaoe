@@ -23,10 +23,17 @@
 #include "driver.h"
 #include "aoe.h"
 #include "mount.h"
+#include <aux_klib.h>
 
 // in this file
 BOOLEAN STDCALL BusAddChild(IN PDEVICE_OBJECT BusDeviceObject, IN PUCHAR ClientMac, IN ULONG Major, IN ULONG Minor, IN BOOLEAN Boot);
 NTSTATUS STDCALL IoCompletionRoutine(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PKEVENT Event);
+
+// exported by hal.dll
+extern NTSTATUS x86BiosReadMemory(USHORT Segment, USHORT Offset, PVOID Buffer, ULONG Size);
+
+DRIVER_REINITIALIZE DrvReinit;
+void DrvReinit(IN DRIVER_OBJECT *DriverObject, IN PVOID Context, IN ULONG Count);
 
 #pragma pack(1)
 typedef struct _ABFT {
@@ -41,8 +48,14 @@ typedef struct _ABFT {
   UCHAR Minor;
   UCHAR Reserved2;
   UCHAR ClientMac[6];
-} __attribute__((__packed__)) ABFT, *PABFT;
+} ABFT, *PABFT;
 #pragma pack()
+
+typedef struct _BOOTCONTEXT {
+  PABFT AOEBootRecord;
+  PDEVICEEXTENSION DevExt;
+  PDEVICE_OBJECT DevObj;
+} BOOTCONTEXT, * PBOOTCONTEXT;;
 
 typedef struct _TARGETLIST {
   TARGET Target;
@@ -79,14 +92,15 @@ VOID STDCALL BusStop() {
 
 NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT PhysicalDeviceObject) {
   NTSTATUS Status;
-  PHYSICAL_ADDRESS PhysicalAddress;
-  PUCHAR PhysicalMemory;
-  UINT Offset, Checksum, i;
-  ABFT AOEBootRecord;
+  PUCHAR PhysicalMemory = NULL;
+  UINT Offset, Checksum;
+  PABFT AOEBootRecord;
+  PBOOTCONTEXT BootContext;
   BOOLEAN FoundAbft = FALSE;
   UNICODE_STRING DeviceName, DosDeviceName;
   PDEVICEEXTENSION DeviceExtension;
   PDEVICE_OBJECT DeviceObject;
+  BOOLEAN Uefi = FALSE;
 
   DbgPrint("BusAddDevice\n");
   RtlInitUnicodeString(&DeviceName, L"\\Device\\AoE");
@@ -120,28 +134,101 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
   }
   DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
-  PhysicalAddress.QuadPart = 0LL;
-  PhysicalMemory = MmMapIoSpace(PhysicalAddress, 0xa0000, MmNonCached);
-  if (!PhysicalMemory) {
-    DbgPrint("Could not map low memory\n");
-  } else {
-    for (Offset = 0; Offset < 0xa0000; Offset += 0x10) {
-      if (((PABFT)&PhysicalMemory[Offset])->Signature == 0x54464261) {
-        Checksum = 0;
-        for (i = 0; i < ((PABFT)&PhysicalMemory[Offset])->Length; i++) Checksum += PhysicalMemory[Offset + i];
-        if (Checksum & 0xff) continue;
-        if (((PABFT)&PhysicalMemory[Offset])->Revision != 1) {
-          DbgPrint("Found aBFT with mismatched revision v%d at segment 0x%4x. want v1.\n", ((PABFT)&PhysicalMemory[Offset])->Revision, (Offset / 0x10));
-          continue;
+  // Allocate space for the aBFT
+  AOEBootRecord = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(ABFT), 'ABFT');
+  if (AOEBootRecord == NULL) {
+    Error("Couldn't allocate memory for the aBFT: ", -1);
+    return STATUS_SUCCESS;
+  }
+  // Initialize aux_klib for ACPI table reading
+  Status = AuxKlibInitialize();
+  if (!NT_SUCCESS(Status)) {
+    Error("Couldn't initialize aux_klib: ", Status);
+    return STATUS_SUCCESS;
+  }
+  // DEBUG
+  PUCHAR AcpiTables = ExAllocatePool2(POOL_FLAG_NON_PAGED, 0x100, 'ABFT');
+  if (AcpiTables == NULL) {
+    Error("Couldn't allocate memory for enumerating ACPI tables: ", -1);
+    return STATUS_SUCCESS;
+  }
+  Status = AuxKlibEnumerateSystemFirmwareTables('ACPI', AcpiTables, 0x100, NULL);
+  if (NT_SUCCESS(Status)) {
+    DbgPrint("\nACPI Tables: %s\n", AcpiTables);
+  }
+  else {
+    DbgPrint("Fail reading ACPI tables\n");
+  }
+  ExFreePool(AcpiTables);
+  // /DEBUG
+
+  // Allocate space and search for BGRT,
+  // a table that's on most UEFI implementations?
+  // This should allow us to identify firmware type
+  PUCHAR AcpiTable = ExAllocatePool2(POOL_FLAG_NON_PAGED, 0x1000, 'ABFT');
+  if (AcpiTable == NULL) {
+    Error("Couldn't allocate memory for reading BGRT: ", -1);
+    return STATUS_SUCCESS;
+  }
+  Status = AuxKlibGetSystemFirmwareTable('ACPI', 'TRGB', AcpiTable, 0x1000, NULL);
+  if (!NT_SUCCESS(Status)) {
+    DbgPrint("BGRT couldn't be loaded: 0x%08X\n", Status);
+    // FIX: Absence of BGRT doesn't mean firmware is BIOS
+  }
+  else {
+    DbgPrint("Found BGRT. UEFI firmware detected.\n");
+    Uefi = TRUE;
+  }
+  if (Uefi) {
+    Status = AuxKlibGetSystemFirmwareTable('ACPI', 'TFBa', AOEBootRecord, sizeof(ABFT), NULL);
+    if (NT_SUCCESS(Status)) {
+      if (AOEBootRecord->Signature == 'TFBa' || AOEBootRecord->Signature == 'aBFT') {
+        DbgPrint(AOEBootRecord->Signature);
+        if (AOEBootRecord->Revision != 1) {
+          DbgPrint("Found aBFT with mismatched revision v%d at ACPI. want v1.\n", AOEBootRecord->Revision);
         }
-        DbgPrint("Found aBFT at segment: 0x%04x\n", (Offset / 0x10));
-        RtlCopyMemory(&AOEBootRecord, &PhysicalMemory[Offset], sizeof(ABFT));
+        DbgPrint("Found aBFT at ACPI\n");
         FoundAbft = TRUE;
-        break;
       }
     }
-    MmUnmapIoSpace(PhysicalMemory, 0xa0000);
+    else {
+      DbgPrint("Couldn't find aBFT on ACPI.\n");
+    }
   }
+  else {
+    // Search first 640 kB for the ABFT (BIOS only)
+    for (USHORT i = 0; i < 0xA000; i += 0x1000) {
+      PhysicalMemory = ExAllocatePool2(POOL_FLAG_NON_PAGED, 0x10000, 'BuAD');
+      Status = x86BiosReadMemory(i, 0, PhysicalMemory, 0x10000);
+      if (!NT_SUCCESS(Status)) {
+        Error("Error reading low memory\n", Status);
+      }
+      if (PhysicalMemory == NULL) {
+        DbgPrint("Could not read low memory\n");
+      }
+      else {
+        for (Offset = 0; Offset < 0x10000; Offset += 0x10) {
+          if (((PABFT)&PhysicalMemory[Offset])->Signature == 'TFBa') {
+            Checksum = 0;
+            for (UINT j = 0; j < ((PABFT)&PhysicalMemory[Offset])->Length; j++)
+              Checksum += PhysicalMemory[Offset + j];
+            if (Checksum & 0xff) continue;
+            if (((PABFT)&PhysicalMemory[Offset])->Revision != 1) {
+              KdPrint(("Found aBFT with mismatched revision v%d at segment 0x%4x offset 0x%4x. want v1.\n",
+                ((PABFT)&PhysicalMemory[Offset])->Revision, i, Offset));
+              continue;
+            }
+            DbgPrint("Found aBFT at segment: 0x%04x offset: 0x%04x\n", i, Offset);
+            RtlCopyMemory(&AOEBootRecord, &PhysicalMemory[Offset], sizeof(ABFT));
+            FoundAbft = TRUE;
+            break;
+          }
+        }
+        ExFreePool(PhysicalMemory);
+      }
+    }
+  }
+  ExFreePool(AcpiTable);
 
 #ifdef RIS
   FoundAbft = TRUE;
@@ -160,11 +247,14 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
 #endif
 
   if (FoundAbft) {
-    DbgPrint("Boot from client NIC %02x:%02x:%02x:%02x:%02x:%02x to major: %d minor: %d\n", AOEBootRecord.ClientMac[0], AOEBootRecord.ClientMac[1], AOEBootRecord.ClientMac[2], AOEBootRecord.ClientMac[3], AOEBootRecord.ClientMac[4], AOEBootRecord.ClientMac[5], AOEBootRecord.Major, AOEBootRecord.Minor);
-    if (!BusAddChild(DeviceObject, AOEBootRecord.ClientMac, AOEBootRecord.Major, AOEBootRecord.Minor, TRUE)) {
-      DbgPrint("BusAddChild failed\n");
+    BootContext = ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(BOOTCONTEXT), 'Boot');
+    if (BootContext == NULL) {
+      DbgPrint("Error allocating memory for the boot context.\n");
     } else {
-      if (DeviceExtension->Bus.PhysicalDeviceObject != NULL) IoInvalidateDeviceRelations(DeviceExtension->Bus.PhysicalDeviceObject, BusRelations);
+      BootContext->AOEBootRecord = AOEBootRecord;
+      BootContext->DevExt = DeviceExtension;
+      BootContext->DevObj = DeviceObject;
+      IoRegisterBootDriverReinitialization(DriverObject, DrvReinit, BootContext);
     }
   } else {
     DbgPrint("Not booting...\n");
@@ -173,6 +263,35 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
   DeviceExtension->State = Started;
 #endif
   return STATUS_SUCCESS;
+}
+
+void DrvReinit(IN DRIVER_OBJECT* DriverObject, IN PVOID Context, IN ULONG Count) {
+  PBOOTCONTEXT BootContext = (PBOOTCONTEXT)Context;
+
+  DbgPrint("DrvReinit\n");
+
+  if (BootContext == NULL) {
+    DbgPrint("DrvReinit: no context\n");
+    return;
+  }
+
+  KdPrint(("Boot from client NIC %02x:%02x:%02x:%02x:%02x:%02x to major: %d minor: %d\n", BootContext->AOEBootRecord->ClientMac[0],
+    BootContext->AOEBootRecord->ClientMac[1], BootContext->AOEBootRecord->ClientMac[2], BootContext->AOEBootRecord->ClientMac[3],
+    BootContext->AOEBootRecord->ClientMac[4], BootContext->AOEBootRecord->ClientMac[5], BootContext->AOEBootRecord->Major,
+    BootContext->AOEBootRecord->Minor));
+  if (!BusAddChild(BootContext->DevObj, BootContext->AOEBootRecord->ClientMac, BootContext->AOEBootRecord->Major, BootContext->AOEBootRecord->Minor, TRUE)) {
+    DbgPrint("DrvReinit BusAddChild failed\n");
+
+    LARGE_INTEGER delay;
+    delay.QuadPart = -10000000L;
+    KeDelayExecutionThread(KernelMode, FALSE, &delay);
+
+    IoRegisterBootDriverReinitialization(DriverObject, DrvReinit, BootContext);
+  }
+  else {
+    if (BootContext->DevExt->Bus.PhysicalDeviceObject != NULL) IoInvalidateDeviceRelations(BootContext->DevExt->Bus.PhysicalDeviceObject, BusRelations);
+    ExFreePool(BootContext);
+  }
 }
 
 VOID STDCALL BusAddTarget(IN PUCHAR ClientMac, IN PUCHAR ServerMac, USHORT Major, UCHAR Minor, LONGLONG LBASize) {
@@ -196,8 +315,8 @@ VOID STDCALL BusAddTarget(IN PUCHAR ClientMac, IN PUCHAR ServerMac, USHORT Major
     Walker = Walker->Next;
   }
 
-  if ((Walker = (PTARGETLIST)ExAllocatePool(NonPagedPool, sizeof(TARGETLIST))) == NULL) {
-    DbgPrint("BusAddTarget ExAllocatePool Target\n");
+  if ((Walker = (PTARGETLIST)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(TARGETLIST), 'BuAT')) == NULL) {
+    DbgPrint("BusAddTarget ExAllocatePool2 Target\n");
     KeReleaseSpinLock(&TargetListSpinLock, Irql);
     return;
   }
@@ -256,7 +375,11 @@ BOOLEAN STDCALL BusAddChild(IN PDEVICE_OBJECT BusDeviceObject, IN PUCHAR ClientM
 
   DeviceObject->Flags |= DO_DIRECT_IO;                  // FIXME?
   DeviceObject->Flags |= DO_POWER_INRUSH;               // FIXME?
-  AoESearchDrive(DeviceExtension);
+  if (!AoESearchDrive(DeviceExtension)) {
+    DbgPrint("Couldn't find AoE drive.\n");
+    if (DeviceExtension->Bus.PhysicalDeviceObject != NULL) IoInvalidateDeviceRelations(DeviceExtension->Bus.PhysicalDeviceObject, BusRelations);
+    return FALSE;
+  }
   DeviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
   if (BusDeviceExtension->Bus.ChildList == NULL) {
     BusDeviceExtension->Bus.ChildList = DeviceExtension;
@@ -275,6 +398,8 @@ NTSTATUS STDCALL BusDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN 
   PDEVICE_RELATIONS DeviceRelations;
   PDEVICEEXTENSION Walker, Next;
   ULONG Count;
+
+  UNREFERENCED_PARAMETER(DeviceObject);
 
   switch (Stack->MinorFunction) {
     case IRP_MN_START_DEVICE:
@@ -324,7 +449,7 @@ NTSTATUS STDCALL BusDispatchPnP(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN 
         Walker = Walker->Disk.Next;
       }
 
-      if ((DeviceRelations = (PDEVICE_RELATIONS)ExAllocatePool(NonPagedPool, sizeof(DEVICE_RELATIONS) + (sizeof(PDEVICE_OBJECT) * Count))) == NULL) {
+      if ((DeviceRelations = (PDEVICE_RELATIONS)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(DEVICE_RELATIONS) + (sizeof(PDEVICE_OBJECT) * Count), 'BuDP')) == NULL) {
         Irp->IoStatus.Information = 0;
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
@@ -406,8 +531,8 @@ NTSTATUS STDCALL BusDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PIR
         TargetWalker = TargetWalker->Next;
       }
 
-      if ((Targets = (PTARGETS)ExAllocatePool(NonPagedPool, sizeof(TARGETS) + (Count * sizeof(TARGET)))) == NULL) {
-        DbgPrint("BusDispatchDeviceControl ExAllocatePool Targets\n");
+      if ((Targets = (PTARGETS)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(TARGETS) + (Count * sizeof(TARGET)), 'BuDC')) == NULL) {
+        DbgPrint("BusDispatchDeviceControl ExAllocatePool2 Targets\n");
         Irp->IoStatus.Information = 0;
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
@@ -438,8 +563,8 @@ NTSTATUS STDCALL BusDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PIR
         DiskWalker = DiskWalker->Disk.Next;
       }
 
-      if ((Disks = (PDISKS)ExAllocatePool(NonPagedPool, sizeof(DISKS) + (Count * sizeof(DISK)))) == NULL) {
-        DbgPrint("BusDispatchDeviceControl ExAllocatePool Disks\n");
+      if ((Disks = (PDISKS)ExAllocatePool2(POOL_FLAG_NON_PAGED, sizeof(DISKS) + (Count * sizeof(DISK)), 'BuDC')) == NULL) {
+        DbgPrint("BusDispatchDeviceControl ExAllocatePool2 Disks\n");
         Irp->IoStatus.Information = 0;
         Status = STATUS_INSUFFICIENT_RESOURCES;
         break;
@@ -510,12 +635,16 @@ NTSTATUS STDCALL BusDispatchDeviceControl(IN PDEVICE_OBJECT DeviceObject, IN PIR
 }
 
 NTSTATUS STDCALL BusDispatchSystemControl(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PIO_STACK_LOCATION Stack, IN PDEVICEEXTENSION DeviceExtension) {
+  UNREFERENCED_PARAMETER(DeviceObject);
+  UNREFERENCED_PARAMETER(Stack);
   DbgPrint("...\n");
   IoSkipCurrentIrpStackLocation(Irp);
   return IoCallDriver(DeviceExtension->Bus.LowerDeviceObject, Irp);
 }
 
 NTSTATUS STDCALL IoCompletionRoutine(IN PDEVICE_OBJECT DeviceObject, IN PIRP Irp, IN PKEVENT Event) {
+  UNREFERENCED_PARAMETER(DeviceObject);
+  UNREFERENCED_PARAMETER(Irp);
   KeSetEvent(Event, 0, FALSE);
   return STATUS_MORE_PROCESSING_REQUIRED;
 }
