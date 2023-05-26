@@ -45,9 +45,6 @@
     <ClCompile Include="src\driver.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\protocol.old.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\protocol.c">
       <Filter>Source Files</Filter>
     </ClCompile>
