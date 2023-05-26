@@ -179,6 +179,7 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
     DbgPrint("Found BGRT. UEFI firmware detected.\n");
     Uefi = TRUE;
   }
+  ExFreePool(AcpiTable);
 #else
   Uefi = TRUE;
 #endif
@@ -223,7 +224,7 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
               continue;
             }
             DbgPrint("Found aBFT at segment: 0x%04x offset: 0x%04x\n", i, Offset);
-            RtlCopyMemory(&AOEBootRecord, &PhysicalMemory[Offset], sizeof(ABFT));
+            RtlCopyMemory(AOEBootRecord, &PhysicalMemory[Offset], sizeof(ABFT));
             FoundAbft = TRUE;
             break;
           }
@@ -232,7 +233,6 @@ NTSTATUS STDCALL BusAddDevice(IN PDRIVER_OBJECT DriverObject, IN PDEVICE_OBJECT 
       }
     }
   }
-  ExFreePool(AcpiTable);
 #endif
 
 #ifdef RIS

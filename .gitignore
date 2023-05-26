@@ -11,3 +11,4 @@ ARM
 Win32
 src/*.old.c
 src/*.old.h
+device.ini
